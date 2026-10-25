@@ -88,7 +88,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0
 .nav{display:flex;gap:6px}
 .nav button{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-size:18px;line-height:1}
 .nav button:hover{border-color:var(--ink)}
-.strip{overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;padding-block:6px 10px;margin-inline:-4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.strip{overflow-x:auto;overscroll-behavior-x:contain;padding-block:6px 10px;margin-inline:-4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
 .rail{display:flex;align-items:flex-start;gap:18px;width:max-content;position:relative;padding:0 4px 56px}
 .rail::after{content:"";position:absolute;left:0;right:0;bottom:26px;height:1px;background:var(--line)}
 .yr-mark{scroll-snap-align:start;flex:0 0 auto;align-self:stretch;display:flex;flex-direction:column;justify-content:space-between;padding-right:4px;position:relative}
@@ -127,6 +127,35 @@ h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0
 .years button{border:0;background:none;padding:4px 8px;border-radius:6px;font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .years button:hover{background:var(--sunk);color:var(--ink)}
 .years .dec{color:var(--ink);font-weight:500}
+
+/* view toggle */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--surface)}
+.seg button{border:0;background:none;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:500;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+/* slinger: one winding line down the page, memories alternate left and right */
+.sl{position:relative;padding-block:24px 64px}
+.sl-svg{position:absolute;left:0;top:0;width:100%;overflow:visible;pointer-events:none}
+.sl-base{fill:none;stroke:var(--line);stroke-width:2}
+.sl-prog{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .12s linear}
+.sl-dots circle{stroke:var(--bg);stroke-width:3}
+.sl-items{position:relative;display:flex;flex-direction:column;gap:36px}
+.sl-item{width:min(44%,380px);position:relative}
+.sl-item.l{align-self:flex-start;margin-left:3%}
+.sl-item.r{align-self:flex-end;margin-right:3%}
+.sl-item .card{width:100%}
+.sl-item .card:hover{transform:translateY(-3px)}
+.sl-item .event{width:auto;border-left:0;padding:10px 0;background:var(--bg)}
+.sl-item.l .event{text-align:right;align-items:flex-end}
+.sl-item .add-card{width:100%;min-height:160px}
+.sl-year{align-self:center;display:flex;flex-direction:column;align-items:center;background:var(--bg);padding:6px 14px;position:relative;z-index:1}
+.sl-year .big{font-family:var(--f-display);font-size:clamp(48px,7vw,84px);line-height:1}
+.sl-year .mono{color:var(--accent)}
+@media (max-width:719px){
+  .sl-item,.sl-item.l,.sl-item.r{align-self:stretch;width:auto;margin:0 0 0 44px}
+  .sl-item.l .event{text-align:left;align-items:flex-start}
+  .sl-year{align-self:flex-start;margin-left:30px;align-items:flex-start;padding-left:4px}
+}
 
 /* empty + notices */
 .empty{padding-block:56px 32px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:40px;align-items:center}
@@ -224,7 +253,8 @@ h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0
 (function(){
 const MONTHS=["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 const MONTHS_FULL=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
-const S={people:[],memories:[],site:{title:"Onze familie",subtitle:""},view:"all",db:null,assets:null,canEdit:false,ready:{p:false,m:false},offline:false};
+let LAYOUT="slinger";try{LAYOUT=localStorage.getItem("layout")||"slinger"}catch(e){}
+const S={layout:LAYOUT,people:[],memories:[],site:{title:"Onze familie",subtitle:""},view:"all",db:null,assets:null,canEdit:false,ready:{p:false,m:false},offline:false};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const URLS={};const BLANK="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
@@ -347,7 +377,7 @@ function allHTML(){
   const span=years.length?years[0]+" — "+years[years.length-1]:"";
   return'<section class="hero"><div><div class="eyebrow mono"><span>Familietijdlijn</span>'+(span?'<span>'+span+'</span>':"")+'</div><h1>'+esc(S.site.title||"Onze familie")+'</h1>'
    +(S.site.subtitle?'<p class="bio">'+esc(S.site.subtitle)+'</p>':'<p class="bio" style="color:var(--muted)">Alle levens naast elkaar, van oud naar nieuw. Kies bovenaan een persoon om één levensverhaal te volgen.</p>')+'</div></section>'
-   +stripWrap(h,years);
+   +stripWrap(h,years,ents,"all");
 }
 function personHTML(p){
   const ents=entriesFor(p.id);const{h,years}=stripHTML(ents,p.id);
@@ -357,23 +387,92 @@ function personHTML(p){
    +(lifeSpan(p)?'<div class="span">'+esc(lifeSpan(p))+'</div>':"")+(p.bio?'<p class="bio">'+esc(p.bio)+'</p>':"")
    +(S.canEdit?'<div class="actions"><button class="btn" type="button" id="b-editp">Persoon bewerken</button></div>':"")+'</div>'
    +(p.portrait?'<div class="portrait"><img alt="Portret van '+esc(p.name)+'" src="'+img(p.portrait)+'"></div>':"")+'</section>'
-   +stripWrap(h,years);
+   +stripWrap(h,years,ents,p.id);
 }
-function stripWrap(h,years){
-  return'<section aria-label="Tijdlijn"><div class="strip-head"><span class="mono">Blader door de tijd →</span><div class="nav"><button type="button" id="s-prev" aria-label="Terug in de tijd">←</button><button type="button" id="s-next" aria-label="Verder in de tijd">→</button></div></div>'
+function layoutToggle(){return'<div class="seg" role="group" aria-label="Weergave"><button type="button" data-layout="slinger" aria-pressed="'+(S.layout==="slinger")+'">Slinger</button><button type="button" data-layout="strip" aria-pressed="'+(S.layout==="strip")+'">Zijwaarts</button></div>'}
+function slingerWrap(entries,pid){
+  const p=pid!=="all"?person(pid):null;let h="",lastY=null,side=0;
+  for(const e of entries){
+    const d=parseD(e.date);const y=d?d.y:null;
+    if(y!==lastY&&y!=null){lastY=y;const ag=p&&e.kind!=="born"?ageLabel(ageAt(p.born,String(y))):"";
+      h+='<div class="sl-year" data-year="'+y+'"><span class="big">'+y+'</span>'+(ag?'<span class="mono">'+esc(ag)+'</span>':"")+'</div>';}
+    const sd=(side++%2)?"r":"l";
+    if(e.kind==="born")h+='<div class="sl-item '+sd+'"><div class="event"><span class="mono">'+esc(fmtD(e.date,true))+'</span><h3>'+(pid==="all"?esc(e.p.name)+" wordt geboren":"Geboren")+'</h3>'+(e.p.birthplace?'<p>'+esc(e.p.birthplace)+'</p>':"")+'</div></div>';
+    else if(e.kind==="died")h+='<div class="sl-item '+sd+'"><div class="event"><span class="mono">'+esc(fmtD(e.date,true))+'</span><h3>'+(pid==="all"?esc(e.p.name)+" overlijdt":"Overleden")+'</h3><p>'+esc(ageLabel(ageAt(e.p.born,e.date)))+'</p></div></div>';
+    else h+='<div class="sl-item '+sd+'">'+cardHTML(e.m,p)+'</div>';
+  }
+  if(S.canEdit)h+='<div class="sl-item '+((side%2)?"r":"l")+'"><button class="add-card" type="button" id="s-add"><span><b>+</b>Herinnering toevoegen</span></button></div>';
+  return'<div class="sl" id="sl"><svg class="sl-svg" aria-hidden="true"><path class="sl-base"/><path class="sl-prog"/><g class="sl-dots"></g></svg><div class="sl-items">'+h+'</div></div>';
+}
+function stripWrap(h,years,entries,pid){
+  if(S.layout==="slinger")return'<section aria-label="Tijdlijn"><div class="strip-head"><span class="mono">Scroll door de tijd ↓</span>'+layoutToggle()+'</div>'+slingerWrap(entries,pid)
+   +(S.memories.length===0?'<p class="nothing">Nog geen herinneringen.</p>':"")+'</section>';
+  return'<section aria-label="Tijdlijn"><div class="strip-head"><span class="mono">Blader door de tijd →</span><div class="actions" style="align-items:center">'+layoutToggle()+'<div class="nav"><button type="button" id="s-prev" aria-label="Terug in de tijd">←</button><button type="button" id="s-next" aria-label="Verder in de tijd">→</button></div></div></div>'
    +'<div class="strip" id="strip" tabindex="0"><div class="rail">'+h+'</div></div>'+yearsHTML(years)
    +(S.memories.length===0?'<p class="nothing">Nog geen herinneringen. '+(S.canEdit?'Voeg de eerste toe met de knop aan het eind van de tijdlijn.':'')+'</p>':"")+'</section>';
 }
 function bindMain(){
-  const strip=$("#strip");
-  const step=dir=>{const c=strip.querySelector(".card,.event");const w=c?c.getBoundingClientRect().width+18:300;strip.scrollBy({left:dir*w,behavior:"smooth"})};
+  document.querySelectorAll("[data-layout]").forEach(b=>b.onclick=()=>{S.layout=b.dataset.layout;try{localStorage.setItem("layout",S.layout)}catch(e){}$("#main").dataset.v="";render()});
+  $("#main").querySelectorAll("[data-mem]").forEach(b=>b.onclick=()=>openLightbox(b.dataset.mem));
+  if(S.layout==="slinger")bindSlinger();else bindStrip();
+  const sa=$("#s-add");if(sa)sa.onclick=()=>openMemory(null,S.view!=="all"?[S.view]:[]);
+  const ep=$("#b-editp");if(ep)ep.onclick=()=>openPerson(person(S.view));
+}
+const REDUCED=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function bindStrip(){
+  const strip=$("#strip");if(!strip)return;
+  /* smooth wheel: glide toward a target instead of jumping per wheel tick */
+  let target=strip.scrollLeft,raf=0;
+  const max=()=>strip.scrollWidth-strip.clientWidth;
+  const glide=()=>{const d=target-strip.scrollLeft;if(Math.abs(d)<.5||REDUCED){strip.scrollLeft=target;raf=0;return}strip.scrollLeft+=d*.16;raf=requestAnimationFrame(glide)};
+  const go=t=>{target=Math.max(0,Math.min(max(),t));if(!raf)raf=requestAnimationFrame(glide)};
+  strip.addEventListener("scroll",()=>{if(!raf)target=strip.scrollLeft},{passive:true});
+  const step=dir=>{const c=strip.querySelector(".card,.event");const w=c?c.getBoundingClientRect().width+18:300;go((raf?target:strip.scrollLeft)+dir*w)};
   $("#s-prev").onclick=()=>step(-1);$("#s-next").onclick=()=>step(1);
   strip.addEventListener("keydown",e=>{if(e.key==="ArrowRight"){e.preventDefault();step(1)}if(e.key==="ArrowLeft"){e.preventDefault();step(-1)}});
-  strip.addEventListener("wheel",e=>{if(Math.abs(e.deltaY)>Math.abs(e.deltaX)&&!e.shiftKey&&strip.scrollWidth>strip.clientWidth){
-    const atStart=strip.scrollLeft<=0&&e.deltaY<0,atEnd=strip.scrollLeft+strip.clientWidth>=strip.scrollWidth-1&&e.deltaY>0;
-    if(!atStart&&!atEnd){e.preventDefault();strip.scrollLeft+=e.deltaY}}},{passive:false});
-  strip.querySelectorAll("[data-mem]").forEach(b=>b.onclick=()=>openLightbox(b.dataset.mem));
-  document.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>{const t=strip.querySelector('[data-year="'+b.dataset.jump+'"]');if(t)strip.scrollTo({left:t.offsetLeft-4,behavior:"smooth"})});
+  strip.addEventListener("wheel",e=>{if(Math.abs(e.deltaY)>Math.abs(e.deltaX)&&!e.shiftKey&&max()>0){
+    const cur=raf?target:strip.scrollLeft;const atStart=cur<=0&&e.deltaY<0,atEnd=cur>=max()-1&&e.deltaY>0;
+    if(!atStart&&!atEnd){e.preventDefault();go(cur+e.deltaY*(e.deltaMode===1?40:1)*1.1)}}},{passive:false});
+  document.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>{const t=strip.querySelector('[data-year="'+b.dataset.jump+'"]');if(t)go(t.offsetLeft-4)});
+}
+let slCleanup=null;
+function bindSlinger(){
+  if(slCleanup)slCleanup();
+  const sl=$("#sl");if(!sl)return;
+  const svg=sl.querySelector("svg"),base=svg.querySelector(".sl-base"),prog=svg.querySelector(".sl-prog"),dots=svg.querySelector(".sl-dots");
+  let len=0;
+  const draw=()=>{
+    if(!sl.isConnected){if(slCleanup)slCleanup();return}
+    const W=sl.clientWidth,H=sl.scrollHeight,narrow=W<720,sb=sl.getBoundingClientRect();
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.style.height=H+"px";
+    const pts=[{x:narrow?18:W/2,y:0}];let dh="";
+    sl.querySelectorAll(".sl-item,.sl-year").forEach(el=>{
+      const b=el.getBoundingClientRect(),y=b.top-sb.top+Math.min(b.height/2,140);
+      let x=W/2;
+      if(narrow)x=18;
+      else if(el.classList.contains("l"))x=b.right-sb.left+34;
+      else if(el.classList.contains("r"))x=b.left-sb.left-34;
+      pts.push({x,y,el});
+      const c=el.querySelector(".card");
+      if(!el.classList.contains("sl-year"))dh+='<circle cx="'+x+'" cy="'+y+'" r="5" style="fill:'+(c&&c.style.getPropertyValue("--c")&&c.style.getPropertyValue("--c")!=="transparent"?c.style.getPropertyValue("--c"):"var(--ink)")+'"/>';
+    });
+    pts.push({x:narrow?18:W/2,y:H});
+    let d="M"+pts[0].x+" "+pts[0].y;
+    for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i],m=(b.y-a.y)*.55;d+=" C"+a.x+" "+(a.y+m)+" "+b.x+" "+(b.y-m)+" "+b.x+" "+b.y}
+    base.setAttribute("d",d);prog.setAttribute("d",d);dots.innerHTML=dh;
+    len=prog.getTotalLength();prog.style.strokeDasharray=len;progress();
+  };
+  const progress=()=>{
+    if(!len)return;const b=sl.getBoundingClientRect(),vh=innerHeight;
+    const f=Math.max(0,Math.min(1,(vh*.75-b.top)/b.height));
+    prog.style.strokeDashoffset=REDUCED?0:len*(1-f);
+  };
+  let q=0;const sched=()=>{if(!q)q=requestAnimationFrame(()=>{q=0;draw()})};
+  const ro=new ResizeObserver(sched);ro.observe(sl.querySelector(".sl-items"));
+  sl.querySelectorAll("img").forEach(i=>i.addEventListener("load",sched,{once:true}));
+  addEventListener("scroll",progress,{passive:true});addEventListener("resize",sched);
+  slCleanup=()=>{ro.disconnect();removeEventListener("scroll",progress);removeEventListener("resize",sched);slCleanup=null};
+  draw();
   const sa=$("#s-add");if(sa)sa.onclick=()=>openMemory(null,S.view!=="all"?[S.view]:[]);
   const ep=$("#b-editp");if(ep)ep.onclick=()=>openPerson(person(S.view));
 }
