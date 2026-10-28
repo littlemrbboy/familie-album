@@ -190,6 +190,8 @@ h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0
 .thumbs .t{width:76px;height:76px;border-radius:6px;overflow:hidden;position:relative;background:var(--sunk)}
 .thumbs .t img{width:100%;height:100%;object-fit:cover}
 .thumbs .t button{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:0;background:var(--scrim);color:#fff;font-size:13px;line-height:1}
+.thumbs .t .mk{left:3px;right:auto;font-size:12px}
+.thumbs .t .mk:hover{background:var(--accent);color:var(--accent-ink)}
 .thumbs .t.cover::after{content:"omslag";position:absolute;left:0;right:0;bottom:0;background:var(--accent);color:var(--accent-ink);font-size:10px;text-align:center;font-family:var(--f-mono);text-transform:uppercase}
 .drop{border:1.5px dashed var(--line);border-radius:8px;padding:16px;text-align:center;color:var(--muted);font-size:14px}
 .drop.on{border-color:var(--accent);color:var(--accent)}
@@ -544,7 +546,8 @@ function wireOv(){const ov=$("#ov");ov.addEventListener("mousedown",e=>{if(e.tar
 
 /* memory form */
 function openMemory(m,preset){
-  let photos=m?(m.photos||[]).slice():[];let pending=[];
+  /* one ordered list of existing (o) and new (n) photos; the first is the cover */
+  let items=m?(m.photos||[]).map(id=>({k:"o",id})):[];
   const sel=new Set(m?(m.personIds||[]):(preset||[]));
   openLayer('<div class="ov" id="ov"><form class="sheet" id="mf"><h2>'+(m?"Herinnering bewerken":"Nieuwe herinnering")+'</h2>'
    +'<div class="field"><label for="m-title">Titel</label><input type="text" id="m-title" required maxlength="120" value="'+esc(m&&m.title)+'" placeholder="Bijvoorbeeld: Zomer op Texel"></div>'
@@ -553,14 +556,17 @@ function openMemory(m,preset){
    +'<div class="field"><label for="m-place">Waar</label><input type="text" id="m-place" maxlength="80" value="'+esc(m&&m.place)+'" placeholder="Plaats of adres"></div>'
    +'<div class="field"><span class="lbl">Wie hoort erbij</span><div class="chips" id="m-ppl">'+peopleSorted().map(p=>'<label><input type="checkbox" value="'+esc(p.id)+'" id="m-p-'+esc(p.id)+'"'+(sel.has(p.id)?" checked":"")+'>'+esc(p.name)+'</label>').join("")+'</div><small>Een herinnering kan bij meerdere mensen op de tijdlijn staan.</small></div>'
    +'<div class="field"><label for="m-text">Het verhaal</label><textarea id="m-text" maxlength="8000" placeholder="Wat gebeurde er, wie waren erbij, wat maakt het bijzonder?">'+esc(m&&m.text)+'</textarea></div>'
-   +'<div class="field"><span class="lbl">Foto\'s</span><div class="thumbs" id="m-thumbs"></div><label class="drop" id="m-drop" for="m-files">Sleep foto\'s hierheen of klik om te kiezen<input type="file" id="m-files" accept="image/*" multiple hidden></label><small>De eerste foto wordt de omslag op de tijdlijn.</small></div>'
+   +'<div class="field"><span class="lbl">Foto\'s</span><div class="thumbs" id="m-thumbs"></div><label class="drop" id="m-drop" for="m-files">Sleep foto\'s hierheen of klik om te kiezen<input type="file" id="m-files" accept="image/*" multiple hidden></label><small>Klik op ★ bij een foto om die de omslag te maken.</small></div>'
    +'<div class="foot"><div class="actions">'+(m?'<button class="btn danger" type="button" id="m-del">Verwijderen</button>':"")+'</div><div class="actions"><button class="btn ghost" type="button" id="m-cancel">Annuleren</button><button class="btn primary" type="submit" id="m-save">Opslaan</button></div></div>'
    +'<div class="status" id="m-st" role="status"></div></form></div>');
   wireOv();$("#m-cancel").onclick=closeLayer;
-  const drawThumbs=()=>{const all=[...photos.map(id=>({src:img(prev(m,id)),k:"o",id})),...pending.map((f,i)=>({src:f.u,k:"n",i}))];
-    $("#m-thumbs").innerHTML=all.map((x,j)=>'<div class="t'+(j===0?" cover":"")+'"><img alt="" src="'+x.src+'"><button type="button" aria-label="Foto weghalen" data-k="'+x.k+'" data-i="'+(x.k==="o"?photos.indexOf(x.id):x.i)+'">×</button></div>').join("");
-    $("#m-thumbs").querySelectorAll("button").forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(b.dataset.k==="o")photos.splice(i,1);else pending.splice(i,1);drawThumbs()})};
-  const addFiles=fs=>{for(const f of fs)if(/^image\//.test(f.type))pending.push({f,u:URL.createObjectURL(f)});drawThumbs()};
+  const drawThumbs=()=>{
+    $("#m-thumbs").innerHTML=items.map((x,j)=>'<div class="t'+(j===0?" cover":"")+'"><img alt="" src="'+(x.k==="o"?img(prev(m,x.id)):x.u)+'">'
+      +(j>0?'<button type="button" class="mk" data-cov="'+j+'" aria-label="Maak deze foto de omslag" title="Maak omslag">★</button>':"")
+      +'<button type="button" data-rm="'+j+'" aria-label="Foto weghalen">×</button></div>').join("");
+    $("#m-thumbs").querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{items.splice(+b.dataset.rm,1);drawThumbs()});
+    $("#m-thumbs").querySelectorAll("[data-cov]").forEach(b=>b.onclick=()=>{const [x]=items.splice(+b.dataset.cov,1);items.unshift(x);drawThumbs()})};
+  const addFiles=fs=>{for(const f of fs)if(/^image\//.test(f.type))items.push({k:"n",f,u:URL.createObjectURL(f)});drawThumbs()};
   drawThumbs();
   $("#m-files").onchange=e=>addFiles(e.target.files);
   const dz=$("#m-drop");["dragenter","dragover"].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add("on")}));
@@ -575,9 +581,10 @@ function openMemory(m,preset){
     const ids=[...document.querySelectorAll("#m-ppl input:checked")].map(i=>i.value);
     if(!ids.length){st("m-st","Kies ten minste één persoon bij wie deze herinnering hoort.",1);return}
     const btn=$("#m-save");btn.disabled=true;
-    try{const up=[];for(let i=0;i<pending.length;i++){st("m-st","Foto "+(i+1)+" van "+pending.length+" uploaden…");up.push(await upload(pending[i].f))}
-      const thumbs={};for(const id of photos){const t=prev(m,id);if(t!==id)thumbs[id]=t}for(const u of up)if(u.thumb)thumbs[u.id]=u.thumb;
-      const data={title:$("#m-title").value.trim(),date,dateEnd,place:$("#m-place").value.trim(),text:$("#m-text").value.trim(),personIds:ids,photos:[...photos,...up.map(u=>u.id)],thumbs};
+    try{const nw=items.filter(x=>x.k==="n");const thumbs={};let n=0;
+      for(const x of items){if(x.k==="o"){const t=prev(m,x.id);if(t!==x.id)thumbs[x.id]=t;continue}
+        st("m-st","Foto "+(++n)+" van "+nw.length+" uploaden…");const u=await upload(x.f);x.k="o";x.id=u.id;if(u.thumb)thumbs[u.id]=u.thumb}
+      const data={title:$("#m-title").value.trim(),date,dateEnd,place:$("#m-place").value.trim(),text:$("#m-text").value.trim(),personIds:ids,photos:items.map(x=>x.id),thumbs};
       if(m)await S.db.doc("memories/"+m.id).update(data);else{data.createdAt=new Date().toISOString();await S.db.collection("memories").add(data)}
       closeLayer();toast(m?"Opgeslagen":"Herinnering toegevoegd")}catch(err){btn.disabled=false;st("m-st",errText(err),1)}};
 }
